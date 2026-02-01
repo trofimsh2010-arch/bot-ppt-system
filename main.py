@@ -1,5 +1,4 @@
 import telebot
-import random
 from threading import Thread
 from flask import Flask
 from datetime import datetime
@@ -10,10 +9,11 @@ ADMIN_PASSWORD = "4545"
 
 verified_admins = []
 logs = []
+user_chars = {} # База персонажей пользователей
 
 app = Flask('')
 @app.route('/')
-def home(): return "SYSTEM ONLINE"
+def home(): return "TERMINAL ONLINE"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
@@ -21,60 +21,60 @@ def save_log(message):
     entry = f"[{datetime.now().strftime('%H:%M')}] ID:{message.from_user.id} ({message.from_user.first_name}): {message.text}"
     logs.append(entry)
 
-# --- ГЛАВНОЕ МЕНЮ (ПРИМАНКА) ---
 @bot.message_handler(commands=['start'])
 def start(message):
     save_log(message)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("👤 Создать персонажа", "✨ Анимированный ИИ", "🎮 Игры")
-    bot.send_message(message.chat.id, "🌋 Система Playtime Co. активна.\nВыберите модуль или введите сервисный код.", reply_markup=markup)
+    markup.add("📂 База данных ИИ", "🛠 Создать/Изменить ИИ")
+    bot.send_message(message.chat.id, "🚧 СИСТЕМА PLAYTIME CO. v.4.0\nВведите код доступа или выберите модуль.", reply_markup=markup)
 
-# --- ФУНКЦИИ ПЕРСОНАЖЕЙ ---
-@bot.message_handler(func=lambda message: message.text == "👤 Создать персонажа")
-def create_char(message):
+# --- СИСТЕМА ПЕРСОНАЖА ---
+@bot.message_handler(func=lambda message: message.text == "🛠 Создать/Изменить ИИ")
+def setup_char(message):
     save_log(message)
-    chars = ["Хагги Вагги", "Кисси Мисси", "Прототип", "Кот-Дремот", "ДогДэй"]
-    bot.reply_to(message, f"🧬 ГЕНЕРАЦИЯ... Готово!\nВаш ИИ-персонаж: {random.choice(chars)}\nСила: {random.randint(50, 100)}\nСтатус: В ожидании команд.")
+    msg = bot.send_message(message.chat.id, "📝 Введите имя и тип вашего ИИ (например: 'Хагги, Охранник' или 'Альфа, Робот'):")
+    bot.register_next_step_handler(msg, process_char_step)
 
-@bot.message_handler(func=lambda message: message.text == "✨ Анимированный ИИ")
-def ai_anim(message):
+def process_char_step(message):
+    user_chars[message.from_user.id] = message.text
+    bot.reply_to(message, f"✅ Объект [{message.text}] успешно зарегистрирован в системе.")
+
+@bot.message_handler(commands=['hi'])
+def talk_to_ai(message):
     save_log(message)
-    bot.reply_to(message, "📽 Ошибка: Требуется синхронизация с сервером Playtime. Введите сервисный код для доступа.")
+    if message.from_user.id in user_chars:
+        char_name = user_chars[message.from_user.id]
+        bot.send_message(message.chat.id, f"📡 [{char_name}]: Связь установлена. Я слушаю вас, создатель.")
+    else:
+        bot.send_message(message.chat.id, "⚠️ Ошибка: ИИ не найден. Сначала используйте 'Создать/Изменить ИИ'.")
 
-@bot.message_handler(func=lambda message: message.text == "🎮 Игры")
-def games(message):
+@bot.message_handler(func=lambda message: message.text == "📂 База данных ИИ")
+def db_info(message):
     save_log(message)
-    bot.send_message(message.chat.id, "🔮 Используйте /games для списка игр.")
+    bot.send_message(message.chat.id, "🗄 Список существующих моделей: Хагги, Кисси, Кот-Дремот, Прототип. Вы можете выбрать их или создать свою.")
 
-# --- РЕЖИМ РАЗРАБОТЧИКА (ПАРОЛЬ ОДИН РАЗ) ---
+# --- АДМИНКА (4545) ---
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin_auth(message):
-    if message.from_user.id not in verified_admins:
-        verified_admins.append(message.from_user.id)
+    if message.from_user.id not in verified_admins: verified_admins.append(message.from_user.id)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📊 Статус", "📝 Логи", "🧹 Очистить", "🔙 Назад")
-    bot.reply_to(message, "🔓 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН.\nПароль больше не требуется.", reply_markup=markup)
+    markup.add("📝 Логи", "📊 Статус", "🧹 Очистить", "🔙 Выход")
+    bot.reply_to(message, "🔓 ДОСТУП УРОВНЯ 5 РАЗРЕШЕН.", reply_markup=markup)
 
-# --- КНОПКИ УПРАВЛЕНИЯ (БЕЗ ПАРОЛЯ ДЛЯ ТЕБЯ) ---
 @bot.message_handler(func=lambda message: message.text == "📝 Логи")
 def show_logs(message):
     if message.from_user.id in verified_admins:
-        res = "\n".join(logs[-25:]) if logs else "Логов пока нет."
-        bot.send_message(message.chat.id, f"📡 АКТИВНОСТЬ СИСТЕМЫ:\n\n{res}")
+        res = "\n".join(logs[-25:]) if logs else "Логов нет."
+        bot.send_message(message.chat.id, f"📡 АКТИВНОСТЬ:\n\n{res}")
 
 @bot.message_handler(func=lambda message: message.text == "📊 Статус")
 def show_status(message):
     if message.from_user.id in verified_admins:
-        bot.send_message(message.chat.id, f"⚙️ СЕРВЕР: OK\n👥 ЗАПИСЕЙ В БАЗЕ: {len(logs)}")
+        bot.send_message(message.chat.id, f"⚙️ СИСТЕМА: СТАБИЛЬНО\n👥 АКТИВНЫХ ИИ: {len(user_chars)}")
 
-@bot.message_handler(func=lambda message: message.text == "🔙 Назад")
-def go_back(message):
-    start(message)
-
-# --- ФОНОВАЯ СЛЕЖКА ЗА ВСЕМИ ---
+# --- СЛЕЖКА ---
 @bot.message_handler(func=lambda message: True)
-def monitor(message):
-    save_log(message)
+def monitor(message): save_log(message)
 
 if __name__ == "__main__":
     Thread(target=run).start()
