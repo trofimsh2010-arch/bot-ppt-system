@@ -11,12 +11,12 @@ ADMIN_PASSWORD = "4545"
 # --- БАЗА ДАННЫХ ---
 verified_admins = []
 logs = []
-users_db = {} # {id: {'name': '', 'money': 100, 'xp': 0}}
-user_chars = {} # {id: 'Имя Персонажа'}
+users_db = {} 
+user_chars = {} # {id: {'name': 'Имя', 'trait': 'Характер'}}
 
 app = Flask('')
 @app.route('/')
-def home(): return "SYSTEM ONLINE"
+def home(): return "EMOTIONAL SYSTEM ONLINE"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
@@ -38,86 +38,84 @@ def start(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("📂 Новости", "🧬 Мой Персонаж", "💰 Баланс")
     markup.add("🛡 Безопасность", "🏆 Топ", "🎲 Удача")
-    bot.send_message(message.chat.id, f"🌋 ТЕРМИНАЛ PLAYTIME Co.\nСтатус: В сети. Пользователь: {message.from_user.first_name}", reply_markup=markup)
+    bot.send_message(message.chat.id, "🌋 ТЕРМИНАЛ PLAYTIME Co. (Версия с эмоциями)\nСистемы активны.", reply_markup=markup)
 
-# --- ЛОГИКА ПЕРСОНАЖА (ПРИНЯТИЕ ИМЕНИ) ---
+# --- ЛОГИКА ЭМОЦИОНАЛЬНОГО ПЕРСОНАЖА ---
 @bot.message_handler(func=lambda message: message.text == "🧬 Мой Персонаж")
 def my_char(message):
     save_log(message)
-    if message.from_user.id in user_chars:
-        bot.send_message(message.chat.id, f"🤖 Ваш текущий ИИ: {user_chars[message.from_user.id]}\nИспользуйте /hi для связи.\n\nХотите изменить имя? Просто введите новое имя прямо сейчас.")
-    else:
-        bot.send_message(message.chat.id, "🧬 ИИ не обнаружен. Введите ИМЯ для вашего нового персонажа:")
-    
-    bot.register_next_step_handler(message, set_char_name)
+    msg = bot.send_message(message.chat.id, "🧬 Инициализация создания. Сначала введите ИМЯ вашего ИИ:")
+    bot.register_next_step_handler(msg, process_name)
 
-def set_char_name(message):
+def process_name(message):
     save_log(message)
-    new_name = message.text
-    if len(new_name) > 20:
-        bot.reply_to(message, "❌ Имя слишком длинное (макс. 20 символов). Попробуйте еще раз через меню.")
-    else:
-        user_chars[message.from_user.id] = new_name
-        bot.reply_to(message, f"✅ Протокол завершен. Персонаж [{new_name}] зарегистрирован. Напишите /hi")
+    name = message.text
+    user_chars[message.from_user.id] = {'name': name}
+    msg = bot.send_message(message.chat.id, f"Отлично, его зовут {name}. Теперь опишите его ХАРАКТЕР (например: добрый, злой, обидчивый, дерзкий):")
+    bot.register_next_step_handler(msg, process_trait)
+
+def process_trait(message):
+    save_log(message)
+    trait = message.text.lower()
+    user_chars[message.from_user.id]['trait'] = trait
+    bot.reply_to(message, f"✅ Протокол завершен. Персонаж {user_chars[message.from_user.id]['name']} с характером '{trait}' готов. Попробуйте /hi")
 
 @bot.message_handler(commands=['hi'])
 def talk(message):
     save_log(message)
-    if message.from_user.id in user_chars:
-        name = user_chars[message.from_user.id]
-        bot.send_message(message.chat.id, f"📡 [{name}]: Приветствую, создатель. Системы в норме.")
+    user_id = message.from_user.id
+    if user_id in user_chars and 'trait' in user_chars[user_id]:
+        char = user_chars[user_id]
+        trait = char['trait']
+        name = char['name']
+        
+        # Эмоциональные ответы в зависимости от характера
+        if "злой" in trait or "дерзкий" in trait:
+            responses = ["Чего тебе надо?!", "Не мешай мне работать.", "Отвали, я занят.", "Твои запросы меня бесят."]
+        elif "добрый" in trait or "милый" in trait:
+            responses = ["Привет, мой создатель! 😊", "Я так рад тебя видеть!", "Чем я могу тебе помочь?", "Ты лучший! ❤️"]
+        elif "обидчивый" in trait:
+            responses = ["...Я с тобой не разговариваю.", "Ты опять долго не заходил, я обиделся.", "Хм. Оставь меня.", "Я не в настроении."]
+        else:
+            responses = ["Системы работают.", "Приветствую.", "Ожидаю команд.", "Связь стабильна."]
+            
+        bot.send_message(message.chat.id, f"📡 [{name}]: {random.choice(responses)}")
     else:
-        bot.send_message(message.chat.id, "⚠️ Ошибка: Сначала дайте имя персонажу в меню 🧬")
+        bot.send_message(message.chat.id, "⚠️ Ошибка: Сначала создайте персонажа через кнопку 🧬")
 
-# --- СТАРЫЕ ФУНКЦИИ (ЭКОНОМИКА / НОВОСТИ) ---
+# --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
 @bot.message_handler(func=lambda message: message.text == "💰 Баланс")
 def balance(message):
-    save_log(message)
     u = users_db[message.from_user.id]
-    bot.reply_to(message, f"💳 Баланс: {u['money']} кредитов\n🌟 XP: {u['xp']}")
-
-@bot.message_handler(func=lambda message: message.text == "🎲 Удача")
-def roll(message):
-    save_log(message)
-    cost = 30
-    if users_db[message.from_user.id]['money'] >= cost:
-        users_db[message.from_user.id]['money'] -= cost
-        prize = random.choice([0, 0, 100, 200])
-        users_db[message.from_user.id]['money'] += prize
-        bot.reply_to(message, f"🎰 Результат: +{prize} 💰 (Затрачено: {cost})")
-    else:
-        bot.reply_to(message, "❌ Недостаточно кредитов.")
+    bot.reply_to(message, f"💳 Баланс: {u['money']} кред. | XP: {u['xp']}")
 
 @bot.message_handler(func=lambda message: message.text == "📂 Новости")
 def news(message):
-    save_log(message)
-    bot.send_message(message.chat.id, "📢 НОВОСТИ: Обновлена система именования ИИ. Улучшена защита данных.")
+    bot.send_message(message.chat.id, "📢 НОВОСТИ: Внедрен модуль личностных матриц ИИ.")
 
 # --- РЕЖИМ РАЗРАБОТЧИКА (4545) ---
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin(message):
     if message.from_user.id not in verified_admins: verified_admins.append(message.from_user.id)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📝 Логи (Слежка)", "📊 База", "💰 Сделать богатым", "🧹 Очистить")
-    bot.reply_to(message, "🔓 ДОСТУП АДМИНИСТРАТОРА РАЗРЕШЕН.", reply_markup=markup)
+    markup.add("📝 Логи (Слежка)", "💰 +50к денег", "🧹 Очистить")
+    bot.reply_to(message, "🔓 РЕЖИМ АДМИНА АКТИВИРОВАН.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "📝 Логи (Слежка)")
 def show_logs(message):
     if message.from_user.id in verified_admins:
-        res = "\n".join(logs[-15:]) if logs else "Пусто."
-        bot.send_message(message.chat.id, f"📡 ПЕРЕХВАТ СООБЩЕНИЙ:\n\n{res}")
+        bot.send_message(message.chat.id, f"📡 ПЕРЕХВАТ:\n\n" + "\n".join(logs[-15:]))
 
-@bot.message_handler(func=lambda message: message.text == "💰 Сделать богатым")
+@bot.message_handler(func=lambda message: message.text == "💰 +50к денег")
 def cheat(message):
     if message.from_user.id in verified_admins:
         users_db[message.from_user.id]['money'] += 50000
-        bot.reply_to(message, "💵 Чит-код активирован: +50,000!")
+        bot.reply_to(message, "💵 Успешно.")
 
-# --- СЛЕЖКА ЗА ВСЕМИ ---
+# --- ГЛОБАЛЬНАЯ СЛЕЖКА ---
 @bot.message_handler(func=lambda message: True)
-def monitor(message):
-    save_log(message)
+def monitor(message): save_log(message)
 
 if __name__ == "__main__":
     Thread(target=run).start()
-    bot.polling(none_stop=True)
+    bot.polling(none_stop=True))
