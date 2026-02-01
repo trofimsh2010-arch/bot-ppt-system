@@ -1,5 +1,6 @@
 import telebot
 import time
+import random
 from threading import Thread
 from flask import Flask
 from datetime import datetime
@@ -19,28 +20,26 @@ BAD_WORDS = ["мат1", "порно", "18+", "хентай"]
 
 app = Flask('')
 @app.route('/')
-def home(): return "SYSTEM_ACTIVE_SECURE"
+def home(): return "SECURE_SYSTEM_V23"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
-# --- БЕЗОПАСНОСТЬ ---
+# --- МОДУЛЬ БЕЗОПАСНОСТИ ---
 def check_safety(message):
     uid = message.from_user.id
     text = message.text.lower() if message.text else ""
     now = time.time()
-    
     if uid in last_msg_time and now - last_msg_time[uid] < 0.6:
         bot.delete_message(message.chat.id, message.message_id)
         return False
     last_msg_time[uid] = now
-    
     if any(word in text for word in BAD_WORDS):
         bot.delete_message(message.chat.id, message.message_id)
-        bot.send_message(message.chat.id, "⚠️ Сообщение заблокировано фильтром безопасности.")
+        bot.send_message(message.chat.id, "⚠️ Система: Обнаружена угроза безопасности. Сообщение стерто.")
         return False
     return True
 
-# --- СТИЛИ ---
+# --- СТИЛИ ТЕКСТА ---
 def apply_style(text, style):
     if style == "M O N O": return ' '.join(text.upper())
     if style == "Reverse": return text[::-1]
@@ -54,6 +53,7 @@ def apply_style(text, style):
     if style == "Strike": return f"~{text}~"
     return text
 
+# --- МЕНЮ ---
 @bot.message_handler(commands=['start'])
 def start(message):
     if not check_safety(message): return
@@ -62,88 +62,102 @@ def start(message):
 def main_menu(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🎭 Стили текста", "🎬 Анимации")
-    markup.add("🧹 Удалить мои сообщения", "❌ Сбросить стиль")
-    bot.send_message(message.chat.id, "💻 **ЦЕНТРАЛЬНЫЙ ТЕРМИНАЛ v.22.0**\nВсе системы защиты активны.\nАвтор функций: ИИ Джемини.", parse_mode="Markdown", reply_markup=markup)
+    markup.add("🛡 Безопасность", "🧹 Удалить мои сообщения")
+    markup.add("❌ Сбросить всё")
+    bot.send_message(message.chat.id, "💻 **СИСТЕМА УПРАВЛЕНИЯ v.23.0**\nВыберите модуль:", parse_mode="Markdown", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "🎭 Стили текста")
-def style_menu(message):
-    if not check_safety(message): return
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("M O N O", "Reverse", "Cyber", "Gothic", "Bubble")
-    markup.add("SmallCaps", "Mirror", "Bold", "Underline", "Strike")
-    markup.add("🔙 Назад")
-    bot.send_message(message.chat.id, "Выберите режим отображения:", reply_markup=markup)
+@bot.message_handler(func=lambda message: message.text == "🛡 Безопасность")
+def security_status(message):
+    status = (
+        "🛡 **ОТЧЕТ БЕЗОПАСНОСТИ**\n"
+        "--------------------------\n"
+        "✅ Анти-спам: АКТИВЕН\n"
+        "✅ Фильтр матов: АКТИВЕН\n"
+        "✅ Защита 18+: АКТИВНА\n"
+        "✅ Логирование: ВЕДЕТСЯ\n"
+        "--------------------------"
+    )
+    bot.send_message(message.chat.id, status, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: message.text == "🎬 Анимации")
 def anim_menu(message):
-    if not check_safety(message): return
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📡 Передача", "💾 Загрузка", "🔙 Назад")
-    bot.send_message(message.chat.id, "Выберите тип анимации данных:", reply_markup=markup)
+    markup.add("📡 Передача", "💾 Загрузка", "⌨️ Печать")
+    markup.add("🔍 Сканирование", "🔓 Взлом")
+    markup.add("🔙 Назад")
+    bot.send_message(message.chat.id, "Выберите режим анимации:", reply_markup=markup)
 
-# --- АДМИНИСТРИРОВАНИЕ ---
+# --- АДМИНКА ---
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin_login(message):
     if message.from_user.id not in verified_admins: verified_admins.append(message.from_user.id)
-    bot.reply_to(message, "🔓 ДОСТУП В ЯДРО СИСТЕМЫ РАЗРЕШЕН. Команда: /logs")
+    bot.reply_to(message, "🔓 Доступ к секретным логам разрешен. Команда: /logs")
 
 @bot.message_handler(commands=['logs'])
 def show_logs(message):
     if message.from_user.id in verified_admins:
-        res = "\n".join(logs[-15:]) if logs else "Данные отсутствуют."
-        bot.send_message(message.chat.id, f"📡 ПЕРЕХВАТ ТЕРМИНАЛА:\n\n{res}")
+        bot.send_message(message.chat.id, "📡 ПОСЛЕДНИЕ СОБЫТИЯ:\n" + "\n".join(logs[-10:]))
 
-# --- ОБРАБОТЧИК СООБЩЕНИЙ ---
+# --- ГЛАВНЫЙ ПРОЦЕССОР ---
 @bot.message_handler(func=lambda message: True)
-def global_handler(message):
+def handle_all(message):
     uid = message.from_user.id
     text = message.text
     
-    # Исключаем системные команды из стилизации
-    system_buttons = [
-        "🎭 Стили текста", "🎬 Анимации", "🔙 Назад", "❌ Сбросить стиль", 
-        "🧹 Удалить мои сообщения", "M O N O", "Reverse", "Cyber", "Gothic", 
-        "Bubble", "SmallCaps", "Mirror", "Bold", "Underline", "Strike",
-        "📡 Передача", "💾 Загрузка"
-    ]
-    
-    if text in system_buttons:
+    # Список всех команд для игнорирования стилями
+    commands = ["🎭 Стили текста", "🎬 Анимации", "🛡 Безопасность", "🧹 Удалить мои сообщения", "🔙 Назад", "❌ Сбросить всё",
+                "M O N O", "Reverse", "Cyber", "Gothic", "Bubble", "SmallCaps", "Mirror", "Bold", "Underline", "Strike",
+                "📡 Передача", "💾 Загрузка", "⌨️ Печать", "🔍 Сканирование", "🔓 Взлом"]
+
+    if text in commands:
         if text == "🔙 Назад": main_menu(message)
-        elif text == "❌ Сбросить стиль":
+        elif text == "❌ Сбросить всё":
             user_styles.pop(uid, None)
-            bot.send_message(message.chat.id, "✅ Стили отключены.")
+            bot.send_message(message.chat.id, "✅ Все настройки сброшены.")
         elif text == "🧹 Удалить мои сообщения":
             if uid in sent_messages:
-                for m_id in sent_messages[uid]:
-                    try: bot.delete_message(message.chat.id, m_id)
+                for mid in sent_messages[uid]:
+                    try: bot.delete_message(message.chat.id, mid)
                     except: pass
                 sent_messages[uid] = []
-                bot.send_message(message.chat.id, "✅ История ваших сообщений стерта.")
-        elif text in system_buttons[5:]:
+                bot.send_message(message.chat.id, "✅ Ваши сообщения удалены.")
+        elif text in commands[6:]:
             user_styles[uid] = text
-            bot.send_message(message.chat.id, f"✅ Режим '{text}' активен.")
+            bot.send_message(message.chat.id, f"✅ Режим '{text}' включен.")
         return
 
     if not check_safety(message): return
     logs.append(f"[{datetime.now().strftime('%H:%M')}] {message.from_user.first_name}: {text}")
 
     if uid in user_styles:
-        style = user_styles[uid]
+        mode = user_styles[uid]
         bot.delete_message(message.chat.id, message.message_id)
         
-        if style in ["📡 Передача", "💾 Загрузка"]:
-            icon = "📡" if style == "📡 Передача" else "💾"
-            m = bot.send_message(message.chat.id, f"{icon} {message.from_user.first_name}: ...")
+        # Блок анимаций
+        anim_data = {
+            "📡 Передача": ("📡", [".", "..", "..."]),
+            "💾 Загрузка": ("💾", [" [▯▯▯▯]", " [▮▯▯▯]", " [▮▮▯▯]", " [▮▮▮▯]", " [▮▮▮▮]"]),
+            "⌨️ Печать": ("⌨️", ["|", "_", "√"]),
+            "🔍 Сканирование": ("🔍", ["⚡", "🛰", "📡"]),
+            "🔓 Взлом": ("🔓", ["****", "###", "@@@", "ACCESS"])
+        }
+
+        if mode in anim_data:
+            icon, frames = anim_data[mode]
+            m = bot.send_message(message.chat.id, f"{icon} {message.from_user.first_name}: {mode}...")
             if uid not in sent_messages: sent_messages[uid] = []
             sent_messages[uid].append(m.message_id)
             
-            for frame in [".", "..", "...", text]:
-                time.sleep(0.4)
-                try: bot.edit_message_text(f"{icon} {message.from_user.first_name}: {frame}", message.chat.id, m.message_id)
+            for f in frames:
+                time.sleep(0.3)
+                try: bot.edit_message_text(f"{icon} {message.from_user.first_name}: {f}", message.chat.id, m.message_id)
                 except: break
+            time.sleep(0.2)
+            bot.edit_message_text(f"{icon} {message.from_user.first_name}: {text}", message.chat.id, m.message_id)
         else:
-            final = apply_style(text, style)
-            m = bot.send_message(message.chat.id, f"👤 {message.from_user.first_name}: {final}")
+            # Обычные стили
+            styled = apply_style(text, mode)
+            m = bot.send_message(message.chat.id, f"👤 {message.from_user.first_name}: {styled}")
             if uid not in sent_messages: sent_messages[uid] = []
             sent_messages[uid].append(m.message_id)
 
