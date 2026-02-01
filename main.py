@@ -15,37 +15,34 @@ logs = []
 user_styles = {} 
 last_msg_time = {}
 sent_messages = {}
+auto_delete_mode = {} # {uid: True/False}
 
 BAD_WORDS = ["мат1", "порно", "18+", "хентай"]
 
 app = Flask('')
 @app.route('/')
-def home(): return "DEV_MODE_ACTIVE"
+def home(): return "SYSTEM_STABLE_V26"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
-# --- МОДУЛЬ БЕЗОПАСНОСТИ ---
+# --- БЕЗОПАСНОСТЬ ---
 def check_safety(message):
     uid = message.from_user.id
     chat_id = message.chat.id
     text = message.text.lower() if message.text else ""
     now = time.time()
-
     if uid in last_msg_time and now - last_msg_time[uid] < 0.6:
         try: bot.delete_message(chat_id, message.message_id)
         except: pass
         return False
     last_msg_time[uid] = now
-    
     if any(word in text for word in BAD_WORDS):
-        try:
-            bot.delete_message(chat_id, message.message_id)
-            bot.send_message(chat_id, "⚠️ Нарушение безопасности. Сообщение удалено.")
+        try: bot.delete_message(chat_id, message.message_id)
         except: pass
         return False
     return True
 
-# --- СТИЛИ ТЕКСТА ---
+# --- СТИЛИ ---
 def apply_style(text, style):
     if style == "M O N O": return ' '.join(text.upper())
     if style == "Reverse": return text[::-1]
@@ -67,66 +64,61 @@ def start(message):
     markup.add("🎭 Стили текста", "🎬 Анимации")
     markup.add("🛡 Безопасность", "🛠 Режим разработчика")
     markup.add("🧹 Удалить мои сообщения", "❌ Сбросить всё")
-    bot.send_message(message.chat.id, "💻 **ТЕРМИНАЛ v.25.0**\nВсе системы активны.", parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(message.chat.id, "💻 **ЦЕНТРАЛЬНЫЙ ТЕРМИНАЛ v.26.0**\nФункции ИИ Джемини восстановлены.", parse_mode="Markdown", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "🛠 Режим разработчика")
 def dev_mode_request(message):
-    bot.send_message(message.chat.id, "🔐 Введите пароль доступа:")
+    bot.send_message(message.chat.id, "🔐 Введите секретный ключ доступа:")
 
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin_login(message):
     if message.from_user.id not in verified_admins: verified_admins.append(message.from_user.id)
-    bot.reply_to(message, "🔓 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН.\nДоступные команды: /logs, /status")
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📝 Логи", "📊 Статус системы", "🔙 Назад")
+    bot.reply_to(message, "🔓 РЕЖИМ РАЗРАБОТЧИКА.\nДоступ к ядру открыт.", reply_markup=markup)
 
-@bot.message_handler(commands=['logs'])
-def show_logs(message):
+@bot.message_handler(func=lambda message: message.text == "📊 Статус системы")
+def sys_status(message):
     if message.from_user.id in verified_admins:
-        bot.send_message(message.chat.id, "📡 ЛОГИ:\n" + "\n".join(logs[-10:]))
+        bot.send_message(message.chat.id, f"📡 **STATUS**\nUptime: 100%\nActive Users: {len(user_styles)}\nSafety: High", parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "🎭 Стили текста")
-def style_menu(message):
+@bot.message_handler(func=lambda message: message.text == "🛡 Безопасность")
+def sec_menu(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("M O N O", "Reverse", "Cyber", "Gothic", "Bubble")
-    markup.add("SmallCaps", "Mirror", "Bold", "Underline", "Strike")
-    markup.add("🔙 Назад")
-    bot.send_message(message.chat.id, "Выберите стиль:", reply_markup=markup)
+    markup.add("⏱ Таймер: 30с (ВКЛ)", "⏱ Таймер (ВЫКЛ)", "🔙 Назад")
+    bot.send_message(message.chat.id, "🛡 **НАСТРОЙКИ ЗАЩИТЫ**\nЗдесь можно включить авто-удаление ваших стилизованных сообщений.", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "🎬 Анимации")
-def anim_menu(message):
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📡 Передача", "💾 Загрузка", "⌨️ Печать", "🔍 Сканирование", "🔓 Взлом")
-    markup.add("🔙 Назад")
-    bot.send_message(message.chat.id, "Выберите анимацию:", reply_markup=markup)
-
-# --- ОСНОВНОЙ ОБРАБОТЧИК ---
+# --- ОБРАБОТЧИК ---
 @bot.message_handler(func=lambda message: True)
 def handle_all(message):
     uid = message.from_user.id
     chat_id = message.chat.id
     text = message.text
     
-    # Кнопки, которые бот не должен "стилизовать"
     sys_btns = ["🎭 Стили текста", "🎬 Анимации", "🛡 Безопасность", "🧹 Удалить мои сообщения", "🔙 Назад", 
                 "❌ Сбросить всё", "🛠 Режим разработчика", "M O N O", "Reverse", "Cyber", "Gothic", 
                 "Bubble", "SmallCaps", "Mirror", "Bold", "Underline", "Strike",
-                "📡 Передача", "💾 Загрузка", "⌨️ Печать", "🔍 Сканирование", "🔓 Взлом"]
+                "📡 Передача", "💾 Загрузка", "⌨️ Печать", "🔍 Сканирование", "🔓 Взлом",
+                "📝 Логи", "📊 Статус системы", "⏱ Таймер: 30с (ВКЛ)", "⏱ Таймер (ВЫКЛ)"]
 
     if text in sys_btns:
         if text == "🔙 Назад": start(message)
         elif text == "❌ Сбросить всё":
             user_styles.pop(uid, None)
-            bot.send_message(chat_id, "✅ Сброшено.")
-        elif text == "🛡 Безопасность":
-            bot.send_message(chat_id, "🛡 Система защиты: 100%. Групповой мониторинг включен.")
+            bot.send_message(chat_id, "✅ Настройки сброшены.")
+        elif text == "⏱ Таймер: 30с (ВКЛ)": auto_delete_mode[uid] = True
+        elif text == "⏱ Таймер (ВЫКЛ)": auto_delete_mode[uid] = False
         elif text == "🧹 Удалить мои сообщения":
             if uid in sent_messages:
                 for mid in sent_messages[uid]:
                     try: bot.delete_message(chat_id, mid)
                     except: pass
                 sent_messages[uid] = []
-        elif text in sys_btns[7:]:
+        elif text in sys_btns[7:17] or text in sys_btns[17:22]:
             user_styles[uid] = text
-            bot.send_message(chat_id, f"✅ Режим '{text}' активирован.")
+            bot.send_message(chat_id, f"✅ Установлен режим: {text}")
+        elif text == "📝 Логи" and uid in verified_admins:
+            bot.send_message(chat_id, "📡 ЛОГИ:\n" + "\n".join(logs[-10:]))
         return
 
     if not check_safety(message): return
@@ -139,18 +131,30 @@ def handle_all(message):
         
         user_name = message.from_user.first_name
         
+        # ВОЗВРАТ ПОЛНОЙ АНИМАЦИИ
         if mode in ["📡 Передача", "💾 Загрузка", "⌨️ Печать", "🔍 Сканирование", "🔓 Взлом"]:
             anim_icons = {"📡 Передача": "📡", "💾 Загрузка": "💾", "⌨️ Печать": "⌨️", "🔍 Сканирование": "🔍", "🔓 Взлом": "🔓"}
             icon = anim_icons[mode]
-            m = bot.send_message(chat_id, f"{icon} {user_name}: {mode}...")
+            m = bot.send_message(chat_id, f"{icon} {user_name}: Инициализация...")
+            
+            # Сохраняем для удаления
             if uid not in sent_messages: sent_messages[uid] = []
             sent_messages[uid].append(m.message_id)
             
-            for f in [".", "..", "..."]:
-                time.sleep(0.3)
+            # Удлиненная анимация
+            frames = ["▯▯▯▯", "▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮", f"OK: {text}"]
+            for f in frames:
+                time.sleep(0.5)
                 try: bot.edit_message_text(f"{icon} {user_name}: {f}", chat_id, m.message_id)
                 except: break
-            bot.edit_message_text(f"{icon} {user_name}: {text}", chat_id, m.message_id)
+                
+            # Авто-удаление через 30с если включено
+            if auto_delete_mode.get(uid):
+                def delayed_delete(c_id, m_id):
+                    time.sleep(30)
+                    try: bot.delete_message(c_id, m_id)
+                    except: pass
+                Thread(target=delayed_delete, args=(chat_id, m.message_id)).start()
         else:
             styled = apply_style(text, mode)
             m = bot.send_message(chat_id, f"👤 {user_name}: {styled}")
