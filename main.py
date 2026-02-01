@@ -14,112 +14,131 @@ logs = []
 user_styles = {} # {id: 'style_name'}
 last_msg_time = {}
 
-# Настройки безопасности
-BAD_WORDS = ["мат1", "порно", "18+"]
+BAD_WORDS = ["мат1", "порно", "18+", "хентай"]
 
 app = Flask('')
 @app.route('/')
-def home(): return "SECURE_TERMINAL_ONLINE"
+def home(): return "ULTIMATE_SECURITY_ONLINE"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
+# --- МОДУЛЬ БЕЗОПАСНОСТИ ---
 def check_safety(message):
     uid = message.from_user.id
     text = message.text.lower() if message.text else ""
     now = time.time()
-    # Анти-спам
+    
+    # 1. Анти-спам
     if uid in last_msg_time and now - last_msg_time[uid] < 1.0:
         bot.delete_message(message.chat.id, message.message_id)
         return False
     last_msg_time[uid] = now
-    # Фильтр матов
+    
+    # 2. Фильтр контента
     if any(word in text for word in BAD_WORDS):
         bot.delete_message(message.chat.id, message.message_id)
-        bot.send_message(message.chat.id, "⚠️ Нарушение протокола. Сообщение стерто.")
+        bot.send_message(message.chat.id, f"⚠️ Нарушение безопасности, {message.from_user.first_name}. Сообщение стерто.")
         return False
     return True
 
+# --- ОБРАБОТКА СТИЛЕЙ ---
 def apply_style(text, style):
     if style == "M O N O":
-        return f"`{' '.join(text.upper())}`"
-    elif style == "Квадраты":
-        return f"[{text}]"
-    elif style == "Анимация":
-        return f"📡 {text}..." # База для анимации
+        return f"{' '.join(text.upper())}"
+    elif style == "Reverse":
+        return text[::-1]
+    elif style == "Cyber":
+        return f"01_{text.replace(' ', '_')}_10"
+    elif style == "Gothic":
+        return f"𝔊𝔬𝔱𝔥𝔦𝔠: {text}"
     return text
 
 @bot.message_handler(commands=['start'])
 def start(message):
     if not check_safety(message): return
-    logs.append(f"[{datetime.now().strftime('%H:%M')}] {message.from_user.first_name} запустил систему.")
-    
+    main_menu(message)
+
+def main_menu(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🎭 Выбрать стиль текста", "🎬 Анимация")
+    markup.add("🎭 Стили текста", "🎬 Анимации")
+    markup.add("🛠 Статус системы")
     
-    welcome_text = (
-        "💻 **ТЕРМИНАЛ PLAYTIME Co.**\n"
+    text = (
+        "💻 **ТЕРМИНАЛ PLAYTIME Co. v.18.0**\n"
         "--------------------------\n"
-        "Статус: Активен. Все развлекательные модули удалены.\n"
-        "Функционал разработан ИИ Джемини.\n"
-        "Доступ к логам закрыт на пароль.\n"
+        "Функции: ИИ Джемини\n"
+        "Безопасность: ВЫСОКАЯ\n"
         "--------------------------"
     )
-    bot.send_message(message.chat.id, welcome_text, reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
 
-# --- СИСТЕМА СТИЛЕЙ ---
-@bot.message_handler(func=lambda message: message.text == "🎭 Выбрать стиль текста")
+# --- МЕНЮ СТИЛЕЙ ---
+@bot.message_handler(func=lambda message: message.text == "🎭 Стили текста")
 def style_menu(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("M O N O", "Квадраты", "Обычный")
-    bot.send_message(message.chat.id, "Выберите стиль кодирования сообщений:", reply_markup=markup)
+    markup.add("M O N O", "Reverse", "Cyber", "Gothic")
+    markup.add("❌ Сбросить стиль", "🔙 Назад")
+    bot.send_message(message.chat.id, "Выберите стиль кодирования:", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ["M O N O", "Квадраты", "Обычный"])
+@bot.message_handler(func=lambda message: message.text == "🎬 Анимации")
+def anim_menu(message):
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📡 Передача", "💾 Загрузка данных")
+    markup.add("🔙 Назад")
+    bot.send_message(message.chat.id, "Выберите тип анимации:", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ["M O N O", "Reverse", "Cyber", "Gothic", "📡 Передача", "💾 Загрузка данных"])
 def set_style(message):
     user_styles[message.from_user.id] = message.text
-    bot.send_message(message.chat.id, f"✅ Стиль '{message.text}' установлен.")
+    bot.reply_to(message, f"✅ Установлен режим: {message.text}")
 
-@bot.message_handler(func=lambda message: message.text == "🎬 Анимация")
-def anim_status(message):
-    user_styles[message.from_user.id] = "Анимация"
-    bot.send_message(message.chat.id, "✅ Режим анимированной передачи включен.")
+@bot.message_handler(func=lambda message: message.text == "❌ Сбросить стиль")
+def reset_style(message):
+    user_styles.pop(message.from_user.id, None)
+    bot.reply_to(message, "✅ Стиль сброшен к обычному.")
+
+@bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+def back_to_start(message):
+    main_menu(message)
 
 # --- АДМИНКА (4545) ---
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin(message):
-    if message.from_user.id not in verified_admins: 
-        verified_admins.append(message.from_user.id)
+    verified_admins.append(message.from_user.id)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📝 Просмотр логов", "🧹 Очистить", "🔙 Выход")
-    bot.reply_to(message, "🔓 ДОСТУП В ЯДРО РАЗРЕШЕН. ТРОФИМ, СЛУШАЮ.")
+    markup.add("📝 Логи", "🧹 Очистить", "🔙 Назад")
+    bot.reply_to(message, "🔓 ЯДРО ВСКРЫТО. СЛУШАЮ, ТРОФИМ.")
 
-@bot.message_handler(func=lambda message: message.text == "📝 Просмотр логов")
+@bot.message_handler(func=lambda message: message.text == "📝 Логи")
 def show_logs(message):
     if message.from_user.id in verified_admins:
-        res = "\n".join(logs[-15:]) if logs else "Логов нет."
-        bot.send_message(message.chat.id, f"📡 ПОЛНЫЙ ПЕРЕХВАТ:\n\n{res}")
+        res = "\n".join(logs[-15:]) if logs else "Нет записей."
+        bot.send_message(message.chat.id, f"📡 ПЕРЕХВАТ СООБЩЕНИЙ:\n\n{res}")
 
-# --- ГЛОБАЛЬНЫЙ ОБРАБОТЧИК (СТИЛИ И ЛОГИ) ---
+# --- ГЛОБАЛЬНЫЙ ПРОЦЕССОР ---
 @bot.message_handler(func=lambda message: True)
-def monitor(message):
+def process_all(message):
     if not check_safety(message): return
     
     uid = message.from_user.id
-    logs.append(f"[{datetime.now().strftime('%H:%M')}] {message.from_user.first_name}: {message.text}")
+    name = message.from_user.first_name
+    logs.append(f"[{datetime.now().strftime('%H:%M')}] {name}: {message.text}")
     
-    # Если у пользователя выбран стиль, переотправляем анимированно или стилизованно
-    if uid in user_styles and user_styles[uid] != "Обычный":
-        styled_text = apply_style(message.text, user_styles[uid])
+    # Если у юзера активен стиль или анимация
+    if uid in user_styles:
+        style = user_styles[uid]
+        bot.delete_message(message.chat.id, message.message_id) # Удаляем оригинал
         
-        if user_styles[uid] == "Анимация":
-            msg = bot.send_message(message.chat.id, "📡 Кодирование...")
-            frames = [f"📡 {message.text}.", f"📡 {message.text}..", f"📡 {message.text}..."]
+        if style in ["📡 Передача", "💾 Загрузка данных"]:
+            m_id = bot.send_message(message.chat.id, f"🌀 {name}: Подключение...").message_id
+            frames = [f" {name}: {message.text}.", f" {name}: {message.text}..", f" {name}: {message.text}..."]
             for frame in frames:
-                try:
-                    time.sleep(0.5)
-                    bot.edit_message_text(frame, message.chat.id, msg.message_id)
+                time.sleep(0.4)
+                try: bot.edit_message_text(f"{'📡' if style=='📡 Передача' else '💾'} {frame}", message.chat.id, m_id)
                 except: break
         else:
-            bot.send_message(message.chat.id, styled_text, parse_mode="Markdown")
+            final_text = apply_style(message.text, style)
+            bot.send_message(message.chat.id, f"👤 {name}: {final_text}")
 
 if __name__ == "__main__":
     Thread(target=run).start()
