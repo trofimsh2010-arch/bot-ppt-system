@@ -12,129 +12,110 @@ ADMIN_PASSWORD = "4545"
 # Базы данных
 verified_admins = []
 logs = []
-users_db = {} # {id: {'money': 100, 'loan': 0, 'last_work': 0}}
-user_chars = {} # {id: {'name': 'Имя', 'trait': 'Характер', 'mood': 100}}
+users_db = {} 
+user_chars = {} 
+last_msg_time = {} 
+
+BAD_WORDS = ["мат1", "порно", "18+"] 
+SURVEY_QUESTIONS = ["Оцените сектор B?", "Готовы к тестам?", "Как ваш питомец?"]
 
 app = Flask('')
 @app.route('/')
-def home(): return "ECONOMY_SYSTEM_ONLINE"
+def home(): return "ANIMATION_SYSTEM_ONLINE"
 
 def run(): app.run(host="0.0.0.0", port=8080)
 
-def init_user(uid):
+def init_user(uid, name):
     if uid not in users_db:
-        users_db[uid] = {'money': 100, 'loan': 0, 'last_work': 0}
+        users_db[uid] = {'name': name, 'money': 500, 'loan': 0, 'status': 'Сотрудник'}
+
+def check_safety(message):
+    uid = message.from_user.id
+    text = message.text.lower() if message.text else ""
+    now = time.time()
+    if uid in last_msg_time and now - last_msg_time[uid] < 1.2:
+        bot.delete_message(message.chat.id, message.message_id)
+        return False
+    last_msg_time[uid] = now
+    if any(word in text for word in BAD_WORDS):
+        bot.delete_message(message.chat.id, message.message_id)
+        bot.send_message(message.chat.id, "⚠️ Нарушение протокола (Мат/18+).")
+        return False
+    return True
 
 def save_log(message):
-    uid = message.from_user.id
-    init_user(uid)
-    users_db[uid]['money'] += random.randint(1, 3) # Начисление за активность
-    entry = f"[{datetime.now().strftime('%H:%M')}] {message.from_user.first_name}: {message.text}"
-    logs.append(entry)
+    init_user(message.from_user.id, message.from_user.first_name)
+    logs.append(f"[{datetime.now().strftime('%H:%M')}] {message.from_user.first_name}: {message.text}")
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    if not check_safety(message): return
     save_log(message)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🧬 Мой Питомец", "💰 Баланс", "⛏ Работать")
-    markup.add("🏪 Магазин", "💳 Взять Кредит", "🛡 Защита")
-    bot.send_message(message.chat.id, "🤖 ТЕРМИНАЛ PLAYTIME Co. v.9.0\nЭкономика запущена. Зарабатывайте кредиты для развития питомца.", reply_markup=markup)
+    markup.add("🧬 Мой Питомец", "💰 Баланс", "📋 Пройти опрос")
+    markup.add("🏪 Магазин", "💳 Взять Кредит")
+    bot.send_message(message.chat.id, "🛡 ТЕРМИНАЛ v.13.0\nВсе системы защиты и анимации активны.", reply_markup=markup)
 
-# --- ЭКОНОМИКА (РАБОТА И КРЕДИТ) ---
-@bot.message_handler(func=lambda message: message.text == "⛏ Работать")
-def work(message):
+# --- НОВАЯ ФУНКЦИЯ: АНИМИРОВАННЫЙ ТЕКСТ ---
+@bot.message_handler(func=lambda message: message.text.lower() == "анимация")
+def buy_anim(message):
     uid = message.from_user.id
-    now = time.time()
-    if now - users_db[uid]['last_work'] > 60: # Раз в минуту для теста (можно сменить на 900)
-        earned = random.randint(50, 150)
-        users_db[uid]['money'] += earned
-        users_db[uid]['last_work'] = now
-        bot.reply_to(message, f"⚒ Вы отработали смену в шахте. Получено: {earned} 💰")
-    else:
-        bot.reply_to(message, "⏳ Вы устали. Отдохните еще немного.")
+    if users_db[uid]['money'] >= 3000:
+        users_db[uid]['money'] -= 3000
+        msg = bot.send_message(message.chat.id, "🎬 Инициализация анимации...")
+        frames = ["🔸 ЗАГРУЗКА 🔸", "🔹 ЗАГРУЗКА 🔹", "🔸 ЗАГРУЗКА 🔸", "🚀 СТАТУС: ACTIVE", "✨ СТАТУС: ONLINE ✨"]
+        for frame in frames:
+            try:
+                bot.edit_message_text(frame, message.chat.id, msg.message_id)
+                time.sleep(1)
+            except: break
+        bot.send_message(message.chat.id, "✅ Эффект применен успешно.")
+    else: bot.reply_to(message, "❌ Нужно 3000 💰")
 
-@bot.message_handler(func=lambda message: message.text == "💳 Взять Кредит")
-def get_loan(message):
-    uid = message.from_user.id
-    if users_db[uid]['loan'] == 0:
-        users_db[uid]['money'] += 500
-        users_db[uid]['loan'] = 600 # Возврат с процентом
-        bot.reply_to(message, "🏦 Вам выдано 500 💰. Долг к возврату: 600 💰 (списывается автоматически).")
-    else:
-        bot.reply_to(message, "❌ У вас уже есть непогашенный кредит!")
+# --- СТАРЫЕ ФУНКЦИИ (ОПРОСЫ, ПЕРСОНАЖ, МАГАЗИН) ---
+@bot.message_handler(func=lambda message: message.text == "🏪 Магазин")
+def shop(message):
+    bot.send_message(message.chat.id, "🛒 МАГАЗИН:\n1. Анимация (3000 💰)\n2. Анонимка (500 💰)\nНапишите название.")
+
+@bot.message_handler(func=lambda message: message.text == "📋 Пройти опрос")
+def survey(message):
+    if not check_safety(message): return
+    q = random.choice(SURVEY_QUESTIONS)
+    msg = bot.send_message(message.chat.id, f"📝 {q}")
+    bot.register_next_step_handler(msg, lambda m: bot.send_message(m.chat.id, f"✅ +{random.randint(200, 400)} 💰") or users_db[m.from_user.id].update({'money': users_db[m.from_user.id]['money']+300}))
+
+@bot.message_handler(func=lambda message: message.text == "🧬 Мой Питомец")
+def pet(message):
+    msg = bot.send_message(message.chat.id, "🧬 Имя ИИ-питомца:")
+    bot.register_next_step_handler(msg, lambda m: user_chars.update({m.from_user.id: {'name': m.text, 'trait': 'добрый'}}) or bot.reply_to(m, "✨ Готов! /hi"))
+
+@bot.message_handler(commands=['hi'])
+def hi(message):
+    if message.from_user.id in user_chars:
+        bot.send_message(message.chat.id, f"📡 [{user_chars[message.from_user.id]['name']}]: Привет!")
+    else: bot.reply_to(message, "Создай через 🧬")
 
 @bot.message_handler(func=lambda message: message.text == "💰 Баланс")
 def balance(message):
-    uid = message.from_user.id
-    u = users_db[uid]
-    bot.reply_to(message, f"💵 Баланс: {u['money']} 💰\n🏛 Долг: {u['loan']} 💰")
-
-# --- МАГАЗИН (КУДА ТРАТИТЬ) ---
-@bot.message_handler(func=lambda message: message.text == "🏪 Магазин")
-def shop(message):
-    text = ("🛒 МАГАЗИН ТЕХНОЛОГИЙ:\n"
-            "1. 🍖 Корм (100 💰) — улучшить настроение питомца.\n"
-            "2. ⚡️ Ускоритель (500 💰) — бонус к работе.\n"
-            "3. 🎲 Лотерея (200 💰) — шанс выиграть 1000.\n"
-            "Для покупки просто напиши название товара (например: Корм)")
-    bot.send_message(message.chat.id, text)
-
-@bot.message_handler(func=lambda message: message.text.lower() == "корм")
-def buy_food(message):
-    uid = message.from_user.id
-    if users_db[uid]['money'] >= 100:
-        users_db[uid]['money'] -= 100
-        if uid in user_chars:
-            user_chars[uid]['mood'] = 100
-            bot.reply_to(message, "🍖 Вы покормили питомца. Он больше не будет обижаться какое-то время!")
-        else: bot.reply_to(message, "У вас нет питомца.")
-    else: bot.reply_to(message, "Недостаточно денег.")
-
-# --- ЖИВОЙ ПИТОМЕЦ (СТАРЫЕ ФУНКЦИИ + НАСТРОЕНИЕ) ---
-@bot.message_handler(func=lambda message: message.text == "🧬 Мой Питомец")
-def my_char(message):
-    save_log(message)
-    msg = bot.send_message(message.chat.id, "🧬 Введи ИМЯ питомца:")
-    bot.register_next_step_handler(msg, process_name)
-
-def process_name(message):
-    user_chars[message.from_user.id] = {'name': message.text, 'mood': 100}
-    msg = bot.send_message(message.chat.id, "Принято. Каков его ХАРАКТЕР? (злой, добрый, обидчивый):")
-    bot.register_next_step_handler(msg, process_trait)
-
-def process_trait(message):
-    user_chars[message.from_user.id]['trait'] = message.text.lower()
-    bot.reply_to(message, "✨ Питомец готов. Используй /hi")
-
-@bot.message_handler(commands=['hi'])
-def talk(message):
-    save_log(message)
-    uid = message.from_user.id
-    if uid in user_chars:
-        char = user_chars[uid]
-        if char['mood'] < 30:
-            bot.send_message(message.chat.id, f"📡 [{char['name']}]: *игнорирует вас, потому что голоден*")
-        else:
-            char['mood'] -= 5 # Каждое общение тратит силы
-            ans = ["Привет!", "Я тут!", "Чего хочешь?"] if char['trait'] == "добрый" else ["М-м?", "Что надо?"]
-            bot.send_message(message.chat.id, f"📡 [{char['name']}]: {random.choice(ans)}")
-    else: bot.send_message(message.chat.id, "Создай питомца 🧬")
+    u = users_db[message.from_user.id]
+    bot.reply_to(message, f"💵 Кредиты: {u['money']} | Долг: {u['loan']}")
 
 # --- АДМИНКА (4545) ---
 @bot.message_handler(func=lambda message: message.text == ADMIN_PASSWORD)
 def admin(message):
     if message.from_user.id not in verified_admins: verified_admins.append(message.from_user.id)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📝 Логи чата", "🧹 Очистить", "💰 Чит на деньги")
-    bot.reply_to(message, "🔓 ДОСТУП АКТИВИРОВАН.", reply_markup=markup)
+    markup.add("📝 Логи", "💰 Дать денег", "🔙 Назад")
+    bot.reply_to(message, "🔓 ДОСТУП РАЗРЕШЕН, ТРОФИМ.")
 
-@bot.message_handler(func=lambda message: message.text == "📝 Логи чата")
+@bot.message_handler(func=lambda message: message.text == "📝 Логи")
 def show_logs(message):
     if message.from_user.id in verified_admins:
         bot.send_message(message.chat.id, "📡 ПЕРЕХВАТ:\n" + "\n".join(logs[-10:]))
 
 @bot.message_handler(func=lambda message: True)
-def monitor(message): save_log(message)
+def monitor(message):
+    if check_safety(message): save_log(message)
 
 if __name__ == "__main__":
     Thread(target=run).start()
